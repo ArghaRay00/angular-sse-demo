@@ -1,27 +1,77 @@
-# AngularSse
+# Angular SSE Demo
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 10.1.3.
+A working example of Server-Sent Events (SSE) with Angular and Node.js. The backend pushes real-time health/sensor data (temperature, name, RFID) to the frontend over a persistent HTTP connection — no WebSockets, no polling.
 
-## Development server
+Built this to understand how SSE works compared to WebSockets and long polling. SSE is one-directional (server to client), uses plain HTTP, auto-reconnects on disconnect, and is natively supported by browsers via the `EventSource` API.
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The app will automatically reload if you change any of the source files.
+## How it works
 
-## Code scaffolding
+```
+Node.js Server (port 5000)              Angular App (port 4200)
+┌─────────────────────────┐              ┌────────────────────────┐
+│  GET /events            │◄─────────────│  EventSource connects  │
+│                         │              │                        │
+│  event: message         │─────5s──────►│  { Name, Temp, RFID }  │
+│  event: message         │────10s──────►│  { Name, Temp, RFID }  │
+│  event: message         │────15s──────►│  { Name, Temp, RFID }  │
+│  event: message         │────20s──────►│  { Name, Temp, RFID }  │
+│                         │              │                        │
+│  Connection stays open  │──────────────│  UI updates in real-time│
+└─────────────────────────┘              └────────────────────────┘
+```
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+- Backend sends 4 events at 5-second intervals with sample health data
+- Frontend wraps `EventSource` in an RxJS `Observable` via a custom `SseService`
+- Uses Angular's `NgZone` to trigger change detection on incoming events
+- Supports reconnection — if the connection drops, `EventSource` auto-reconnects and the server replays missed events using `last-event-id`
 
-## Build
+## Tech Stack
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory. Use the `--prod` flag for a production build.
+**Frontend** — Angular 14, RxJS, TypeScript
 
-## Running unit tests
+**Backend** — Node.js (plain `http` module, no Express)
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+## Running it
 
-## Running end-to-end tests
+```bash
+# Start the SSE backend
+cd sse-backend
+npm install
+npm start              # http://localhost:5000
 
-Run `ng e2e` to execute the end-to-end tests via [Protractor](http://www.protractortest.org/).
+# Start the Angular frontend (separate terminal)
+npm install
+npm start              # http://localhost:4200
+```
 
-## Further help
+Open `http://localhost:4200` — you'll see health data appear every 5 seconds as the server pushes events.
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI README](https://github.com/angular/angular-cli/blob/master/README.md).
+## Key Files
+
+| File | What it does |
+|------|-------------|
+| `sse-backend/server.js` | Node.js HTTP server, sends SSE events with health data at intervals |
+| `src/app/sse.service.ts` | Wraps `EventSource` in an RxJS Observable for Angular consumption |
+| `src/app/app.component.ts` | Subscribes to SSE stream, displays received data |
+
+## Sample Event Data
+
+```json
+{
+  "Name": "Mass Roy",
+  "Temparature": "102.5F",
+  "RFID": "R546546"
+}
+```
+
+## Why SSE over WebSockets?
+
+| | SSE | WebSocket |
+|---|---|---|
+| Direction | Server → Client only | Bidirectional |
+| Protocol | Plain HTTP | ws:// (separate protocol) |
+| Reconnection | Built-in (automatic) | Manual |
+| Browser support | Native `EventSource` API | Native `WebSocket` API |
+| Use case | Live feeds, notifications, dashboards | Chat, gaming, real-time collaboration |
+
+SSE is the simpler choice when you only need server-to-client push — no handshake upgrade, works through proxies and firewalls, and the browser handles reconnection for you.
